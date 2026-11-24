@@ -11,78 +11,60 @@ export const TIMEOUT_COMMAND_NAME = "timeout";
 
 export interface TimeoutCommandController {
   getTimeoutSeconds: () => number | null;
-  /** Apply the new default timeout, refresh the bash tool schema, and persist. Returns whether saving succeeded. */
   setTimeoutSeconds: (timeoutSeconds: number | null) => boolean;
 }
 
-const COMPLETION_ITEMS = [
-  ...TIMEOUT_PRESETS.map((seconds) => ({
-    value: `${seconds}s`,
-    label: seconds === DEFAULT_BASH_TIMEOUT_SECONDS ? `${seconds}s (default)` : formatTimeoutDetailed(seconds),
-    description: seconds === DEFAULT_BASH_TIMEOUT_SECONDS ? "Default bash timeout" : "Set bash default timeout",
+const COMPLETIONS = [
+  ...TIMEOUT_PRESETS.map((s) => ({
+    value: `${s}s`,
+    label: s === DEFAULT_BASH_TIMEOUT_SECONDS ? `${s}s (default)` : formatTimeoutDetailed(s),
+    description: s === DEFAULT_BASH_TIMEOUT_SECONDS ? "Default bash timeout" : "Set bash default timeout",
   })),
-  { value: "status", label: "status", description: "Show current default bash timeout" },
   { value: "reset", label: "reset", description: `Reset to default (${DEFAULT_BASH_TIMEOUT_SECONDS}s)` },
   { value: "off", label: "off", description: "Disable default bash timeout" },
 ];
 
-interface MenuChoice {
-  label: string;
-  action: { kind: "set"; value: number | null } | { kind: "custom" };
-}
+type MenuChoice = { label: string; value: number | null | "custom" };
 
-function buildMenuChoices(current: number | null): MenuChoice[] {
+function buildMenu(current: number | null): MenuChoice[] {
   const isCustom = current !== null && !(TIMEOUT_PRESETS as readonly number[]).includes(current);
-  const choices: MenuChoice[] = TIMEOUT_PRESETS.map((seconds) => {
-    const tags: string[] = [];
-    if (seconds === DEFAULT_BASH_TIMEOUT_SECONDS) tags.push("default");
-    if (current === seconds) tags.push("current");
-    const base = formatTimeoutDetailed(seconds);
-    const label = tags.length > 0 ? `${base} [${tags.join(", ")}]` : base;
-    return { label, action: { kind: "set", value: seconds } };
+  const choices: MenuChoice[] = TIMEOUT_PRESETS.map((s) => {
+    const tags = [s === DEFAULT_BASH_TIMEOUT_SECONDS && "default", current === s && "current"].filter(Boolean);
+    return {
+      label: tags.length ? `${formatTimeoutDetailed(s)} [${tags.join(", ")}]` : formatTimeoutDetailed(s),
+      value: s,
+    };
   });
 
   choices.push({
     label: isCustom
       ? `Custom... — currently ${formatTimeoutDetailed(current)}`
       : "Custom... — enter timeout (e.g. 90, 2m, 300s)",
-    action: { kind: "custom" },
+    value: "custom",
   });
-
   choices.push({
     label: current === null ? "Disable — no default timeout [current]" : "Disable — no default timeout",
-    action: { kind: "set", value: null },
+    value: null,
   });
-
   if (current !== DEFAULT_BASH_TIMEOUT_SECONDS) {
     choices.push({
       label: `Reset to default (${DEFAULT_BASH_TIMEOUT_SECONDS}s)`,
-      action: { kind: "set", value: DEFAULT_BASH_TIMEOUT_SECONDS },
+      value: DEFAULT_BASH_TIMEOUT_SECONDS,
     });
   }
-
   return choices;
 }
 
-function applyTimeoutChoice(
-  nextTimeout: number | null,
-  controller: TimeoutCommandController,
-  ctx: ExtensionCommandContext,
-): void {
-  const saved = controller.setTimeoutSeconds(nextTimeout);
-  const description =
-    nextTimeout === null
+function applyTimeout(next: number | null, controller: TimeoutCommandController, ctx: ExtensionCommandContext): void {
+  const saved = controller.setTimeoutSeconds(next);
+  const msg =
+    next === null
       ? "Bash default timeout disabled (no default timeout)."
-      : `Bash default timeout set to ${formatTimeoutDetailed(nextTimeout)}.`;
-
-  if (saved) {
-    ctx.ui.notify(description, "info");
-  } else {
-    ctx.ui.notify(
-      `${description} Applied for this session, but could not save to ${getSettingsPath()}.`,
-      "warning",
-    );
-  }
+      : `Bash default timeout set to ${formatTimeoutDetailed(next)}.`;
+  ctx.ui.notify(
+    saved ? msg : `${msg} Applied for this session, but could not save to ${getSettingsPath()}.`,
+    saved ? "info" : "warning",
+  );
 }
 
 export function registerTimeoutCommand(
@@ -92,37 +74,21 @@ export function registerTimeoutCommand(
   pi.registerCommand(TIMEOUT_COMMAND_NAME, {
     description: `Configure default bash timeout (default: ${DEFAULT_BASH_TIMEOUT_SECONDS}s)`,
     getArgumentCompletions: (prefix) => {
-      const lowered = prefix.trim().toLowerCase();
-      const filtered = lowered
-        ? COMPLETION_ITEMS.filter(
-            (item) =>
-              item.value.toLowerCase().startsWith(lowered) ||
-              item.label.toLowerCase().startsWith(lowered),
-          )
-        : COMPLETION_ITEMS;
-      return filtered.length > 0 ? filtered : null;
+      const q = prefix.trim().toLowerCase();
+      const items = q
+        ? COMPLETIONS.filter((c) => c.value.startsWith(q) || c.label.toLowerCase().startsWith(q))
+        : COMPLETIONS;
+      return items.length ? items : null;
     },
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       if (trimmed) {
-        const lowered = trimmed.toLowerCase();
-        if (lowered === "status" || lowered === "show") {
-          const current = controller.getTimeoutSeconds();
-          ctx.ui.notify(
-            `Bash default timeout: ${formatTimeoutDetailed(current)} (${getSettingsPath()}).`,
-            "info",
-          );
-          return;
-        }
         const parsed = parseTimeoutInput(trimmed);
         if (!parsed.ok) {
-          ctx.ui.notify(
-            `${parsed.error} Usage: /${TIMEOUT_COMMAND_NAME} [<seconds>|90s|5m|status|reset|off]`,
-            "warning",
-          );
+          ctx.ui.notify(`${parsed.error} Usage: /${TIMEOUT_COMMAND_NAME} [<seconds>|90s|5m|reset|off]`, "warning");
           return;
         }
-        applyTimeoutChoice(parsed.timeoutSeconds, controller, ctx);
+        applyTimeout(parsed.timeoutSeconds, controller, ctx);
         return;
       }
 
@@ -135,33 +101,30 @@ export function registerTimeoutCommand(
         return;
       }
 
-      const choices = buildMenuChoices(current);
+      const menu = buildMenu(current);
       const selected = await ctx.ui.select(
         `Bash default timeout — current: ${formatTimeoutDetailed(current)}`,
-        choices.map((choice) => choice.label),
+        menu.map((m) => m.label),
       );
-      if (selected === undefined) return;
+      const picked = menu.find((m) => m.label === selected);
+      if (!picked) return;
 
-      const matched = choices.find((choice) => choice.label === selected);
-      if (!matched) return;
-
-      if (matched.action.kind === "set") {
-        applyTimeoutChoice(matched.action.value, controller, ctx);
+      if (picked.value !== "custom") {
+        applyTimeout(picked.value, controller, ctx);
         return;
       }
 
       const raw = await ctx.ui.input(
         "Enter default bash timeout (e.g. 180, 90s, 5m, reset, or off)",
-        current !== null ? `${current}s` : `${DEFAULT_BASH_TIMEOUT_SECONDS}s`,
+        `${current ?? DEFAULT_BASH_TIMEOUT_SECONDS}s`,
       );
       if (raw === undefined) return;
-
       const parsed = parseTimeoutInput(raw);
       if (!parsed.ok) {
         ctx.ui.notify(parsed.error, "warning");
         return;
       }
-      applyTimeoutChoice(parsed.timeoutSeconds, controller, ctx);
+      applyTimeout(parsed.timeoutSeconds, controller, ctx);
     },
   });
 }

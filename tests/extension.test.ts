@@ -176,11 +176,6 @@ describe("pi-timeout extension", () => {
       await command.handler("", statusRun.ctx);
       assert.match(statusRun.notifications[0]?.message ?? "", /45s/);
 
-      const statusCmdRun = createCommandContext({ hasUI: true });
-      await command.handler("status", statusCmdRun.ctx);
-      assert.equal(statusCmdRun.notifications[0]?.type, "info");
-      assert.match(statusCmdRun.notifications[0]?.message ?? "", /45s/);
-
       const invalidRun = createCommandContext({ hasUI: true });
       await command.handler("-10", invalidRun.ctx);
       assert.equal(invalidRun.notifications[0]?.type, "warning");
