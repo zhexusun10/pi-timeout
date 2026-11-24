@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
   type BashToolDetails,
   type BashToolOptions,
@@ -41,13 +43,21 @@ export function prefixDefaultTimeoutMessage(message: string): string {
 export function resolveBashToolOptionsForCwd(cwd: string): BashToolOptions {
   try {
     const agentDir = getAgentDir();
-    let projectTrusted = false;
-    try {
-      projectTrusted = new ProjectTrustStore(agentDir).get(cwd) === true;
-    } catch {
-      projectTrusted = false;
+    const globalSettings = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
+    let trustDecision: boolean | null = null;
+    if (existsSync(join(agentDir, "trust.json"))) {
+      try {
+        trustDecision = new ProjectTrustStore(agentDir).get(cwd);
+      } catch {
+        trustDecision = null;
+      }
     }
-    const settings = SettingsManager.create(cwd, agentDir, { projectTrusted });
+    const projectTrusted =
+      trustDecision === true ||
+      (trustDecision === null && globalSettings.getDefaultProjectTrust() === "always");
+    const settings = projectTrusted
+      ? SettingsManager.create(cwd, agentDir, { projectTrusted: true })
+      : globalSettings;
     const shellPath = settings.getShellPath();
     const commandPrefix = settings.getShellCommandPrefix();
     return {
@@ -88,6 +98,9 @@ export function createDefaultTimeoutBashToolDefinition(
 
   return {
     ...cachedBase,
+    // Do not force-activate `bash` when the user excluded it (e.g. `--tools -bash` or `--no-builtin-tools`).
+    // When `bash` is active via default tools or `--tools`, this definition overrides it cleanly.
+    defaultActive: false,
     parameters: createBashTimeoutSchema(options.getDefaultTimeoutSeconds()),
     async execute(toolCallId, params, signal, onUpdate, ctx) {
       const configuredDefault = options.getDefaultTimeoutSeconds();
@@ -103,7 +116,7 @@ export function createDefaultTimeoutBashToolDefinition(
         if (usedDefaultTimeout && err instanceof Error) {
           const rewritten = prefixDefaultTimeoutMessage(err.message);
           if (rewritten !== err.message) {
-            throw new Error(rewritten);
+            throw new Error(rewritten, { cause: err });
           }
         }
         throw err;

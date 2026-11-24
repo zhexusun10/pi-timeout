@@ -39,6 +39,7 @@ Run `/timeout` in Pi:
 - `/timeout <value>` — Set directly without opening the dialog:
   - `/timeout 120` or `/timeout 120s`
   - `/timeout 5m`
+  - `/timeout status`
   - `/timeout reset` (or `/timeout default`)
   - `/timeout off` (or `/timeout none`)
 

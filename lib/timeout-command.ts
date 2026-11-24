@@ -21,6 +21,7 @@ const COMPLETION_ITEMS = [
     label: seconds === DEFAULT_BASH_TIMEOUT_SECONDS ? `${seconds}s (default)` : formatTimeoutDetailed(seconds),
     description: seconds === DEFAULT_BASH_TIMEOUT_SECONDS ? "Default bash timeout" : "Set bash default timeout",
   })),
+  { value: "status", label: "status", description: "Show current default bash timeout" },
   { value: "reset", label: "reset", description: `Reset to default (${DEFAULT_BASH_TIMEOUT_SECONDS}s)` },
   { value: "off", label: "off", description: "Disable default bash timeout" },
 ];
@@ -104,10 +105,19 @@ export function registerTimeoutCommand(
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       if (trimmed) {
+        const lowered = trimmed.toLowerCase();
+        if (lowered === "status" || lowered === "show") {
+          const current = controller.getTimeoutSeconds();
+          ctx.ui.notify(
+            `Bash default timeout: ${formatTimeoutDetailed(current)} (${getSettingsPath()}).`,
+            "info",
+          );
+          return;
+        }
         const parsed = parseTimeoutInput(trimmed);
         if (!parsed.ok) {
           ctx.ui.notify(
-            `${parsed.error} Usage: /${TIMEOUT_COMMAND_NAME} [<seconds>|90s|5m|reset|off]`,
+            `${parsed.error} Usage: /${TIMEOUT_COMMAND_NAME} [<seconds>|90s|5m|status|reset|off]`,
             "warning",
           );
           return;

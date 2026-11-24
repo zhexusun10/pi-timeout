@@ -26,7 +26,8 @@ const TIMEOUT_INPUT_PATTERN =
   /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)?$/i;
 
 export function getSettingsPath(): string {
-  return process.env.PI_TIMEOUT_SETTINGS || join(getAgentDir(), "pi-timeout.json");
+  const override = process.env.PI_TIMEOUT_SETTINGS?.trim();
+  return override || join(getAgentDir(), "pi-timeout.json");
 }
 
 export function isValidTimeoutSeconds(value: unknown): value is number {

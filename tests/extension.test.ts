@@ -176,6 +176,11 @@ describe("pi-timeout extension", () => {
       await command.handler("", statusRun.ctx);
       assert.match(statusRun.notifications[0]?.message ?? "", /45s/);
 
+      const statusCmdRun = createCommandContext({ hasUI: true });
+      await command.handler("status", statusCmdRun.ctx);
+      assert.equal(statusCmdRun.notifications[0]?.type, "info");
+      assert.match(statusCmdRun.notifications[0]?.message ?? "", /45s/);
+
       const invalidRun = createCommandContext({ hasUI: true });
       await command.handler("-10", invalidRun.ctx);
       assert.equal(invalidRun.notifications[0]?.type, "warning");
@@ -234,6 +239,57 @@ describe("pi-timeout extension", () => {
         assert.equal(updatedModelProps?.timeout?.description, "Timeout in seconds (optional, default 75s)");
       } finally {
         session.dispose();
+      }
+    });
+  });
+
+  it("does not force-activate bash when disabled via --tools -bash, --tools allowlist, or --no-builtin-tools", async () => {
+    await withIsolatedSettings(async (settingsPath) => {
+      const cwd = process.cwd();
+      const agentDir = join(settingsPath, "..", "agent");
+      const scenarios = [
+        { label: "-bash modifier", options: { tools: ["-bash"] } },
+        { label: "read,edit allowlist", options: { tools: ["read", "edit"] } },
+        { label: "noTools builtin", options: { noTools: "builtin" as const } },
+      ];
+
+      for (const scenario of scenarios) {
+        const loader = new DefaultResourceLoader({
+          cwd,
+          agentDir,
+          noExtensions: true,
+          noSkills: true,
+          noPromptTemplates: true,
+          noThemes: true,
+          extensionFactories: [piTimeout],
+        });
+        await loader.reload();
+
+        const { session } = await createAgentSession({
+          cwd,
+          resourceLoader: loader,
+          sessionManager: SessionManager.inMemory(cwd),
+          settingsManager: SettingsManager.inMemory(),
+          ...scenario.options,
+        });
+        try {
+          assert.equal(
+            session.getActiveToolNames().includes("bash"),
+            false,
+            `Expected bash to stay inactive for ${scenario.label}`,
+          );
+          const timeoutCmd = session.extensionRunner.getCommand(TIMEOUT_COMMAND_NAME);
+          assert.ok(timeoutCmd);
+          const { ctx } = createCommandContext({ hasUI: false, cwd });
+          await timeoutCmd.handler("60", ctx);
+          assert.equal(
+            session.getActiveToolNames().includes("bash"),
+            false,
+            `Expected bash to stay inactive after /timeout update for ${scenario.label}`,
+          );
+        } finally {
+          session.dispose();
+        }
       }
     });
   });
