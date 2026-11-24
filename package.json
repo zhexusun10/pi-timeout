@@ -1,5 +1,5 @@
 {
-  "name": "@zhexusun10/pi-timeout",
+  "name": "pi-simple-timeout",
   "version": "0.1.0",
   "description": "Pi coding agent extension that sets a configurable default timeout (180s) for the bash tool, updates the bash schema timeout description, prefixes default timeout returns, and lets users adjust the timeout in the TUI.",
   "type": "module",

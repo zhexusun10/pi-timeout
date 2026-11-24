@@ -3,13 +3,13 @@
 A [Pi](https://github.com/earendil-works/pi) coding agent extension that adds a configurable default timeout (**180s** by default) to the built-in `bash` tool.
 
 [![CI](https://github.com/zhexusun10/pi-timeout/actions/workflows/ci.yml/badge.svg)](https://github.com/zhexusun10/pi-timeout/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/%40zhexusun10/pi-timeout)](https://www.npmjs.com/package/@zhexusun10/pi-timeout)
+[![npm](https://img.shields.io/npm/v/pi-simple-timeout)](https://www.npmjs.com/package/pi-simple-timeout)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## Installation
 
 ```bash
-pi install npm:@zhexusun10/pi-timeout
+pi install npm:pi-simple-timeout
 ```
 
 Then start a new Pi session, or run `/reload` in an existing session.
